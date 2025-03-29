@@ -211,21 +211,52 @@ class Squid(Alien):
     def __init__(self, x, y):
         size = int(30 * SCALE_FACTOR)
         super().__init__(x, y, size, size, 1, 2 * SCALE_FACTOR, 10, 50, squid_img)
+        self.kamikaze_mode = False
+        self.kamikaze_speed = 3 * SCALE_FACTOR
+        self.target_x = 0
+        self.target_y = 0
+        self.direction_timer = 0
+        self.direction_change_interval = 20
     
     def move(self):
-        # Standard alien movement pattern without random offset
-        # This follows the same path as other aliens but is faster
-        self.x += self.speed * self.direction
-        
-        # Keep in bounds
-        if self.x <= 0:
-            self.direction = 1
-            self.y += int(60 * SCALE_FACTOR)
-        elif self.x + self.width >= SCREEN_WIDTH:
-            self.direction = -1
-            self.y += int(60 * SCALE_FACTOR)
+        # Check if we're close to the bottom of the screen to enter kamikaze mode
+        if self.y > SCREEN_HEIGHT * 0.6 and not self.kamikaze_mode:
+            self.kamikaze_mode = True
+            
+        if not self.kamikaze_mode:
+            # Standard alien movement pattern
+            self.x += self.speed * self.direction
+            
+            # Keep in bounds
+            if self.x <= 0:
+                self.direction = 1
+                self.y += int(60 * SCALE_FACTOR)
+            elif self.x + self.width >= SCREEN_WIDTH:
+                self.direction = -1
+                self.y += int(60 * SCALE_FACTOR)
+        else:
+            # Kamikaze mode - rapid movement toward spaceship
+            # We'll update the target position periodically to follow the spaceship
+            self.direction_timer += 1
+            if self.direction_timer >= self.direction_change_interval:
+                self.direction_timer = 0
+                # This will be set in Game.update() to point to the current spaceship position
+                
+            # Move toward the target (if it's been set)
+            if self.target_x != 0:
+                dx = self.target_x - (self.x + self.width/2)
+                dy = self.target_y - (self.y + self.height/2)
+                distance = max(1, (dx**2 + dy**2)**0.5)  # Avoid division by zero
+                
+                # Normalize and multiply by speed
+                self.x += (dx / distance) * self.kamikaze_speed
+                self.y += (dy / distance) * self.kamikaze_speed
         
         super().update()
+        
+    def set_target(self, x, y):
+        self.target_x = x
+        self.target_y = y
 
 # Crab alien (shooter)
 class Crab(Alien):
@@ -281,6 +312,8 @@ class Spaceship(GameObject):
         self.reload_cooldown = 0
         self.money = 100
         self.bullet_damage = 1
+        self.autofire = False  # Added autofire flag
+        self.autofire_cooldown = 0
     
     def update(self):
         keys = pygame.key.get_pressed()
@@ -291,8 +324,16 @@ class Spaceship(GameObject):
         
         if self.reload_cooldown > 0:
             self.reload_cooldown -= 1
+            
+        # Handle autofire
+        if self.autofire:
+            self.autofire_cooldown -= 1
+            if self.autofire_cooldown <= 0:
+                self.autofire_cooldown = int(60 / self.reload_speed)
+                return self.shoot()
         
         super().update()
+        return None  # Return None if no bullet was fired
     
     def shoot(self):
         if self.reload_cooldown <= 0:
@@ -310,24 +351,28 @@ class Spaceship(GameObject):
     def purchase_upgrade(self, upgrade_type):
         if upgrade_type == "reload":
             cost = int(100 * self.reload_speed)
-            if self.money >= cost and self.reload_speed < 5:
+            if self.money >= cost:  # Removed the cap
                 self.money -= cost
                 self.reload_speed += 0.5
                 return True
         elif upgrade_type == "health":
             cost = int(self.max_health * 0.5)
-            if self.money >= cost and self.max_health < 300:
+            if self.money >= cost:  # Removed the cap
                 self.money -= cost
                 self.max_health += 50
                 self.health = min(self.health + 50, self.max_health)
                 return True
         elif upgrade_type == "speed":
             cost = int((self.movement_speed / SCALE_FACTOR) * 30)
-            if self.money >= cost and self.movement_speed < 10 * SCALE_FACTOR:
+            if self.money >= cost:  # Removed the cap
                 self.money -= cost
                 self.movement_speed += 1 * SCALE_FACTOR
                 return True
         return False
+    
+    def toggle_autofire(self):
+        self.autofire = not self.autofire
+        return self.autofire
     
     def add_money(self, amount):
         self.money += amount
@@ -341,10 +386,13 @@ class Mothership(GameObject):
         self.health = 500
         self.max_health = 500
         self.money = 200
-        self.money_growth_rate = 1
-        self.growth_factor = 0.001
+        self.money_growth_rate = 50  # Increased for discrete increments
+        self.growth_factor = 0.1
         self.time = 0
+        self.money_timer = 0
+        self.money_interval = 60  # Add money every second (60 frames)
         self.spawn_cooldown = 0
+        self.spawn_cooldown_time = 30  # Half a second cooldown between spawns
         self.selected_alien = "squid"  # Default selection
         
         # Position for alien preview
@@ -363,8 +411,13 @@ class Mothership(GameObject):
     
     def update(self):
         self.time += 1
-        # Earn money over time with soft exponential growth
-        self.money += self.money_growth_rate * (1 + self.growth_factor * self.time)
+        
+        # Earn money at discrete intervals with exponential growth
+        self.money_timer += 1
+        if self.money_timer >= self.money_interval:
+            self.money_timer = 0
+            growth_amount = self.money_growth_rate * (1 + self.growth_factor * (self.time / 600))
+            self.money += int(growth_amount)
         
         # Update spawn cooldown
         if self.spawn_cooldown > 0:
@@ -373,18 +426,25 @@ class Mothership(GameObject):
         super().update()
     
     def spawn_alien(self, x):
+        # Check cooldown first
+        if self.spawn_cooldown > 0:
+            return None
+            
         # Spawn at the provided x coordinate
         y = self.y + self.height
         
         # Check if we have enough money
         if self.selected_alien == "squid" and self.money >= 50:
             self.money -= 50
+            self.spawn_cooldown = self.spawn_cooldown_time
             return Squid(x, y)
         elif self.selected_alien == "crab" and self.money >= 100:
             self.money -= 100
+            self.spawn_cooldown = self.spawn_cooldown_time
             return Crab(x, y)
         elif self.selected_alien == "octopus" and self.money >= 200:
             self.money -= 200
+            self.spawn_cooldown = self.spawn_cooldown_time
             return Octopus(x, y)
         
         return None
@@ -447,6 +507,8 @@ class Game:
         self.is_running = True
         self.game_over = False
         self.winner = None
+        self.paused = False
+        self.help_screen = False
         
         # Create game objects
         spaceship_x = SCREEN_WIDTH // 2 - int(30 * SCALE_FACTOR)
@@ -479,7 +541,11 @@ class Game:
                 if event.key == pygame.K_ESCAPE:
                     self.is_running = False
                 
-                if not self.game_over:
+                if event.key == pygame.K_g:
+                    self.help_screen = True
+                    self.paused = True
+                
+                if not self.paused and not self.game_over:
                     # Spaceship player controls
                     if event.key == pygame.K_SPACE:
                         bullet = self.spaceship.shoot()
@@ -494,23 +560,33 @@ class Game:
                     elif event.key == pygame.K_3:
                         self.spaceship.purchase_upgrade("speed")
                     
+                    # Toggle autofire
+                    if event.key == pygame.K_f:
+                        self.spaceship.toggle_autofire()
+                    
                     # Mothership player controls
                     if event.key == pygame.K_q:
                         self.mothership.select_prev_alien()
                     elif event.key == pygame.K_e:
                         self.mothership.select_next_alien()
                 
-                else:
+                elif self.game_over:
                     # Restart game on Enter if game is over
                     if event.key == pygame.K_RETURN:
                         self.__init__()  # Reset the game
+            
+            # Key releases
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_g:
+                    self.help_screen = False
+                    self.paused = False
             
             # Mouse position tracking
             if event.type == pygame.MOUSEMOTION:
                 self.mouse_pos = event.pos
             
             # Mouse click for spawning aliens
-            if event.type == pygame.MOUSEBUTTONDOWN and not self.game_over:
+            if event.type == pygame.MOUSEBUTTONDOWN and not self.game_over and not self.paused:
                 if event.button == 1:  # Left mouse button
                     # Check if we're in the top half of the screen (mothership territory)
                     if event.pos[1] < SCREEN_HEIGHT // 2:
@@ -519,17 +595,27 @@ class Game:
                             self.aliens.append(new_alien)
     
     def update(self):
-        if self.game_over:
+        if self.game_over or self.paused:
             return
         
         # Update player
         self.spaceship.update()
+        
+        # Check for autofire
+        auto_bullet = self.spaceship.update()
+        if auto_bullet:
+            self.bullets.append(auto_bullet)
         
         # Update mothership
         self.mothership.update()
         
         # Update aliens
         for alien in self.aliens[:]:
+            # Set target for squids if they're in kamikaze mode
+            if isinstance(alien, Squid) and alien.kamikaze_mode:
+                alien.set_target(self.spaceship.x + self.spaceship.width/2, 
+                                self.spaceship.y + self.spaceship.height/2)
+            
             alien.update()
             
             # Check if aliens reached the spaceship
@@ -578,10 +664,22 @@ class Game:
                         
                         self.bullets.remove(bullet)
                         break
-            else:  # Enemy bullets hitting player
+            else:  # Enemy bullets hitting player or other aliens (friendly fire)
+                # Check if bullet hits the player
                 if bullet.collides_with(self.spaceship):
                     self.spaceship.take_damage(bullet.damage)
                     self.bullets.remove(bullet)
+                    continue
+                
+                # Check for friendly fire - aliens hitting other aliens
+                for alien in self.aliens[:]:
+                    # Don't check collision with the alien that fired the bullet
+                    if alien != bullet.source and bullet.collides_with(alien):
+                        if alien.take_damage(bullet.damage):
+                            self.aliens.remove(alien)
+                        
+                        self.bullets.remove(bullet)
+                        break
         
         # Check game over conditions
         if self.spaceship.health <= 0:
@@ -595,6 +693,10 @@ class Game:
     def draw(self):
         # Clear the screen
         screen.fill(BLACK)
+        
+        if self.help_screen:
+            self.draw_help_screen()
+            return
         
         # Draw mothership
         self.mothership.draw(screen)
@@ -620,10 +722,114 @@ class Game:
         # Update the display
         pygame.display.flip()
     
+    def draw_help_screen(self):
+        # Draw help screen with all game instructions
+        # Fill background with semi-transparent overlay
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 220))
+        screen.blit(overlay, (0, 0))
+        
+        # Adjust font sizes for screen resolution
+        title_font = pygame.font.SysFont('Arial', int(40 * SCALE_FACTOR), bold=True)
+        header_font = pygame.font.SysFont('Arial', int(30 * SCALE_FACTOR), bold=True)
+        text_font = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
+        
+        # Title
+        title = title_font.render("SPACE INVADERS: DEFENDER VS MOTHERSHIP", True, WHITE)
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, int(50 * SCALE_FACTOR)))
+        
+        # Instructions sections
+        y_pos = int(120 * SCALE_FACTOR)
+        line_height = int(26 * SCALE_FACTOR)
+        
+        # Game objective
+        objective_header = header_font.render("Game Objective:", True, YELLOW)
+        screen.blit(objective_header, (int(50 * SCALE_FACTOR), y_pos))
+        y_pos += line_height * 1.5
+        
+        objective_text = [
+            "This is a two-player competitive game based on Space Invaders.",
+            "Player 1 (Mothership): Spawn aliens to defeat the Spaceship.",
+            "Player 2 (Spaceship): Defend Earth by shooting aliens and the Mothership."
+        ]
+        
+        for line in objective_text:
+            text = text_font.render(line, True, WHITE)
+            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
+            y_pos += line_height
+        
+        y_pos += line_height
+        
+        # Player 1 controls
+        p1_header = header_font.render("Player 1 (Mothership) Controls:", True, PURPLE)
+        screen.blit(p1_header, (int(50 * SCALE_FACTOR), y_pos))
+        y_pos += line_height * 1.5
+        
+        p1_controls = [
+            "Q/E: Select different alien types",
+            "Left Mouse Click: Spawn selected alien at the clicked location",
+            "Earn money over time to spawn more aliens",
+            "Alien Types:",
+            "  - Squid (Blue): Fast kamikaze aliens that charge at the Spaceship",
+            "  - Crab (Red): Medium-health aliens that shoot at the Spaceship",
+            "  - Octopus (Yellow): Tank aliens with high health that deal continuous damage"
+        ]
+        
+        for line in p1_controls:
+            text = text_font.render(line, True, WHITE)
+            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
+            y_pos += line_height
+        
+        y_pos += line_height
+        
+        # Player 2 controls
+        p2_header = header_font.render("Player 2 (Spaceship) Controls:", True, GREEN)
+        screen.blit(p2_header, (int(50 * SCALE_FACTOR), y_pos))
+        y_pos += line_height * 1.5
+        
+        p2_controls = [
+            "Left/Right Arrow Keys: Move the spaceship",
+            "Space: Shoot",
+            "F: Toggle auto-fire",
+            "1: Upgrade reload speed",
+            "2: Upgrade max health",
+            "3: Upgrade movement speed",
+            "Earn money by destroying aliens"
+        ]
+        
+        for line in p2_controls:
+            text = text_font.render(line, True, WHITE)
+            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
+            y_pos += line_height
+        
+        y_pos += line_height
+        
+        # General controls
+        gen_header = header_font.render("General Controls:", True, CYAN)
+        screen.blit(gen_header, (int(50 * SCALE_FACTOR), y_pos))
+        y_pos += line_height * 1.5
+        
+        gen_controls = [
+            "G: Show/hide this help screen",
+            "Escape: Quit game",
+            "Enter: Restart game (after game over)"
+        ]
+        
+        for line in gen_controls:
+            text = text_font.render(line, True, WHITE)
+            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
+            y_pos += line_height
+        
+        # Press G instruction at bottom
+        continue_text = text_font.render("Release G to continue playing", True, YELLOW)
+        screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT - int(50 * SCALE_FACTOR)))
+        
+        pygame.display.flip()
+    
     def draw_ui(self):
         # Adjust font sizes for scale
-        font_small = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
-        font_medium = pygame.font.SysFont('Arial', int(24 * SCALE_FACTOR))
+        font_small = pygame.font.SysFont('Arial', int(18 * SCALE_FACTOR))
+        font_medium = pygame.font.SysFont('Arial', int(22 * SCALE_FACTOR))
         
         # Health bars
         # Player health bar
@@ -654,8 +860,12 @@ class Game:
         screen.blit(speed_text, (SCREEN_WIDTH - bar_width * 1.5, SCREEN_HEIGHT - bar_height - margin))
         
         # Player Stats
-        stats_text = font_small.render(f"Reload: {self.spaceship.reload_speed:.1f}x  Speed: {int(self.spaceship.movement_speed / SCALE_FACTOR)}", True, WHITE)
+        stats_text = font_small.render(f"Reload: {self.spaceship.reload_speed:.1f}x  Speed: {int(self.spaceship.movement_speed / SCALE_FACTOR)}  Autofire: {'ON' if self.spaceship.autofire else 'OFF'}", True, WHITE)
         screen.blit(stats_text, (margin, SCREEN_HEIGHT - bar_height * 3 - margin * 3))
+        
+        # Minimal instructions reminder
+        help_text = font_small.render("Press G for help", True, YELLOW)
+        screen.blit(help_text, (SCREEN_WIDTH // 2 - help_text.get_width() // 2, SCREEN_HEIGHT - margin * 2))
         
         # Mothership player UI elements
         # Selected alien indicator and costs
@@ -688,13 +898,6 @@ class Game:
                         2 if self.mothership.selected_alien == "octopus" else 1)
         screen.blit(octopus_img, (margin + 2 * (box_size + box_margin) + 5, box_y + 5))
         screen.blit(octopus_cost, (margin + 2 * (box_size + box_margin), box_y + box_size + 5))
-        
-        # Instructions for players
-        controls_text1 = font_small.render("Player 1 (Mothership): Q/E to select alien, click to spawn", True, WHITE)
-        controls_text2 = font_small.render("Player 2 (Spaceship): Arrow keys to move, SPACE to shoot, 1/2/3 to upgrade", True, WHITE)
-        
-        screen.blit(controls_text1, (SCREEN_WIDTH // 2 - controls_text1.get_width() // 2, int(10 * SCALE_FACTOR)))
-        screen.blit(controls_text2, (SCREEN_WIDTH // 2 - controls_text2.get_width() // 2, int(30 * SCALE_FACTOR)))
     
     def draw_game_over(self):
         # Adjust font sizes for scale
