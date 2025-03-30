@@ -25,55 +25,42 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREE
 pygame.display.set_caption("Space Invaders: Defender vs Mothership")
 clock = pygame.time.Clock()
 
-# Load game assets with scaling for fullscreen
 # Scale factor based on screen resolution
 SCALE_FACTOR = min(SCREEN_WIDTH / 1920, SCREEN_HEIGHT / 1080) * 1.5  # Adjust multiplier as needed
 
-def create_spaceship_surface():
-    size = (int(60 * SCALE_FACTOR), int(45 * SCALE_FACTOR))
-    surf = pygame.Surface(size, pygame.SRCALPHA)
-    pygame.draw.polygon(surf, GREEN, [(size[0]//2, 0), (0, size[1]), (size[0], size[1])])
-    return surf
+# Load game assets
+def load_image(filename, size):
+    try:
+        img = pygame.image.load(f"assets/{filename}")
+        return pygame.transform.scale(img, size)
+    except:
+        # Create a placeholder surface if image loading fails
+        surf = pygame.Surface(size, pygame.SRCALPHA)
+        pygame.draw.rect(surf, WHITE, (0, 0, size[0], size[1]), 1)
+        font = pygame.font.SysFont('Arial', 12)
+        text = font.render(filename, True, WHITE)
+        surf.blit(text, (size[0]//2 - text.get_width()//2, size[1]//2 - text.get_height()//2))
+        return surf
 
-def create_mothership_surface():
-    width = int(180 * SCALE_FACTOR)
-    height = int(60 * SCALE_FACTOR)
-    surf = pygame.Surface((width, height + int(30 * SCALE_FACTOR)), pygame.SRCALPHA)
-    pygame.draw.rect(surf, PURPLE, (0, 0, width, height))
-    pygame.draw.polygon(surf, PURPLE, [(0, height), (width, height), (width//2, height + int(30 * SCALE_FACTOR))])
-    return surf
+# Load images with proper scaling
+def load_game_assets():
+    spaceship_size = (int(60 * SCALE_FACTOR), int(45 * SCALE_FACTOR))
+    mothership_size = (int(180 * SCALE_FACTOR), int(90 * SCALE_FACTOR))
+    squid_size = (int(30 * SCALE_FACTOR), int(30 * SCALE_FACTOR))
+    crab_size = (int(45 * SCALE_FACTOR), int(45 * SCALE_FACTOR))
+    octopus_size = (int(60 * SCALE_FACTOR), int(60 * SCALE_FACTOR))
+    
+    assets = {
+        'spaceship': load_image("spaceship.png", spaceship_size),
+        'mothership': load_image("mothership.png", mothership_size),
+        'squid': load_image("squid.png", squid_size),
+        'crab': load_image("crab.png", crab_size),
+        'octopus': load_image("octopus.png", octopus_size)
+    }
+    
+    return assets
 
-def create_squid_surface():
-    size = int(30 * SCALE_FACTOR)
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.rect(surf, BLUE, (0, size//2, size, size//2))
-    pygame.draw.rect(surf, BLUE, (size//4, 0, size//2, size//2))
-    pygame.draw.rect(surf, BLUE, (0, 0, size//4, size//4))
-    pygame.draw.rect(surf, BLUE, (size - size//4, 0, size//4, size//4))
-    return surf
-
-def create_crab_surface():
-    size = int(45 * SCALE_FACTOR)
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.circle(surf, RED, (size//2, size//2), size//3)
-    pygame.draw.rect(surf, RED, (size//10, size//3, size - size//5, size//3))
-    pygame.draw.rect(surf, RED, (0, size//6, size//6, size//6))
-    pygame.draw.rect(surf, RED, (size - size//6, size//6, size//6, size//6))
-    pygame.draw.rect(surf, RED, (0, size - size//3, size//6, size//6))
-    pygame.draw.rect(surf, RED, (size - size//6, size - size//3, size//6, size//6))
-    return surf
-
-def create_octopus_surface():
-    size = int(60 * SCALE_FACTOR)
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.circle(surf, YELLOW, (size//2, size//2), size//3)
-    for i in range(8):
-        angle = math.pi * i / 4
-        x = size//2 + (size//2 - 5) * math.cos(angle)
-        y = size//2 + (size//2 - 5) * math.sin(angle)
-        pygame.draw.circle(surf, YELLOW, (int(x), int(y)), size//10)
-    return surf
-
+# Create simple surfaces as fallbacks if images can't be loaded
 def create_bullet_surface(color):
     width = int(6 * SCALE_FACTOR)
     height = int(15 * SCALE_FACTOR)
@@ -81,14 +68,12 @@ def create_bullet_surface(color):
     pygame.draw.rect(surf, color, (0, 0, width, height))
     return surf
 
-# Game assets
-spaceship_img = create_spaceship_surface()
-mothership_img = create_mothership_surface()
-squid_img = create_squid_surface()
-crab_img = create_crab_surface()
-octopus_img = create_octopus_surface()
-bullet_player_img = create_bullet_surface(GREEN)
-bullet_enemy_img = create_bullet_surface(RED)
+# Load assets
+game_assets = load_game_assets()
+
+# Create bullet surfaces
+player_bullet_surface = create_bullet_surface(GREEN)
+enemy_bullet_surface = create_bullet_surface(RED)
 
 # Font for text
 font_small = pygame.font.SysFont('Arial', 20)
@@ -121,8 +106,11 @@ class GameObject:
 # Bullet class
 class Bullet(GameObject):
     def __init__(self, x, y, speed, damage, source, is_player=True):
-        image = bullet_player_img if is_player else bullet_enemy_img
-        super().__init__(x, y, 4, 10, image)
+        # Use simple surfaces instead of PNGs for bullets
+        image = player_bullet_surface if is_player else enemy_bullet_surface
+        width = int(6 * SCALE_FACTOR)
+        height = int(15 * SCALE_FACTOR)
+        super().__init__(x, y, width, height, image)
         self.speed = speed
         self.damage = damage
         self.source = source
@@ -210,7 +198,7 @@ class Alien(GameObject):
 class Squid(Alien):
     def __init__(self, x, y):
         size = int(30 * SCALE_FACTOR)
-        super().__init__(x, y, size, size, 1, 2 * SCALE_FACTOR, 10, 50, squid_img)
+        super().__init__(x, y, size, size, 1, 2 * SCALE_FACTOR, 10, 50, game_assets['squid'])
         self.kamikaze_mode = False
         self.kamikaze_speed = 3 * SCALE_FACTOR
         self.target_x = 0
@@ -262,7 +250,7 @@ class Squid(Alien):
 class Crab(Alien):
     def __init__(self, x, y):
         size = int(45 * SCALE_FACTOR)
-        super().__init__(x, y, size, size, 3, 1 * SCALE_FACTOR, 5, 100, crab_img)
+        super().__init__(x, y, size, size, 3, 1 * SCALE_FACTOR, 5, 100, game_assets['crab'])
         self.bullet_damage = 5
         self.shoot_cooldown = 0
     
@@ -283,7 +271,7 @@ class Crab(Alien):
 class Octopus(Alien):
     def __init__(self, x, y):
         size = int(60 * SCALE_FACTOR)
-        super().__init__(x, y, size, size, 8, 0.5 * SCALE_FACTOR, 3, 200, octopus_img)
+        super().__init__(x, y, size, size, 8, 0.5 * SCALE_FACTOR, 3, 200, game_assets['octopus'])
         self.ticking = False
         self.tick_timer = 0
     
@@ -304,14 +292,14 @@ class Spaceship(GameObject):
     def __init__(self, x, y):
         size_w = int(60 * SCALE_FACTOR)
         size_h = int(45 * SCALE_FACTOR)
-        super().__init__(x, y, size_w, size_h, spaceship_img)
+        super().__init__(x, y, size_w, size_h, game_assets['spaceship'])
         self.health = 100
         self.max_health = 100
         self.movement_speed = 5 * SCALE_FACTOR
         self.reload_speed = 1
         self.reload_cooldown = 0
         self.money = 100
-        self.bullet_damage = 1
+        self.bullet_damage = 1  # Starting damage
         self.autofire = False  # Added autofire flag
         self.autofire_cooldown = 0
     
@@ -351,22 +339,22 @@ class Spaceship(GameObject):
     def purchase_upgrade(self, upgrade_type):
         if upgrade_type == "reload":
             cost = int(100 * self.reload_speed)
-            if self.money >= cost:  # Removed the cap
+            if self.money >= cost:
                 self.money -= cost
                 self.reload_speed += 0.5
                 return True
         elif upgrade_type == "health":
             cost = int(self.max_health * 0.5)
-            if self.money >= cost:  # Removed the cap
+            if self.money >= cost:
                 self.money -= cost
                 self.max_health += 50
                 self.health = min(self.health + 50, self.max_health)
                 return True
-        elif upgrade_type == "speed":
-            cost = int((self.movement_speed / SCALE_FACTOR) * 30)
-            if self.money >= cost:  # Removed the cap
+        elif upgrade_type == "damage":  # Changed from "speed" to "damage"
+            cost = int(self.bullet_damage * 50)  # Cost based on current damage
+            if self.money >= cost:
                 self.money -= cost
-                self.movement_speed += 1 * SCALE_FACTOR
+                self.bullet_damage += 1  # Increase bullet damage by 1
                 return True
         return False
     
@@ -382,7 +370,7 @@ class Mothership(GameObject):
     def __init__(self, x, y):
         width = int(180 * SCALE_FACTOR)
         height = int(90 * SCALE_FACTOR)
-        super().__init__(x, y, width, height, mothership_img)
+        super().__init__(x, y, width, height, game_assets['mothership'])
         self.health = 500
         self.max_health = 500
         self.money = 200
@@ -451,7 +439,7 @@ class Mothership(GameObject):
     
     def take_damage(self, amount):
         self.health -= amount
-        if self.health < 0:  # Fixed typo: 'a' -> '0'
+        if self.health < 0:
             self.health = 0
         return self.health <= 0
     
@@ -509,6 +497,7 @@ class Game:
         self.winner = None
         self.paused = False
         self.help_screen = False
+        self.start_screen = True  # Added start screen flag
         
         # Create game objects
         spaceship_x = SCREEN_WIDTH // 2 - int(30 * SCALE_FACTOR)
@@ -525,11 +514,6 @@ class Game:
         
         # Mouse position for mothership player
         self.mouse_pos = (0, 0)
-        
-        # Preview images
-        self.squid_preview = squid_img
-        self.crab_preview = crab_img
-        self.octopus_preview = octopus_img
     
     def handle_events(self):
         for event in pygame.event.get():
@@ -541,11 +525,24 @@ class Game:
                 if event.key == pygame.K_ESCAPE:
                     self.is_running = False
                 
-                if event.key == pygame.K_g:
+                if event.key == pygame.K_g and not self.start_screen:
                     self.help_screen = True
                     self.paused = True
                 
-                if not self.paused and not self.game_over:
+                # Start screen controls
+                if self.start_screen:
+                    if event.key == pygame.K_RETURN:
+                        self.start_screen = False
+                
+                # Game over controls
+                elif self.game_over:
+                    # Restart game on Enter if game is over
+                    if event.key == pygame.K_RETURN:
+                        self.__init__()  # Reset the game
+                        self.start_screen = False  # Skip start screen on restart
+                
+                # Game controls
+                elif not self.paused and not self.game_over:
                     # Spaceship player controls
                     if event.key == pygame.K_SPACE:
                         bullet = self.spaceship.shoot()
@@ -558,7 +555,7 @@ class Game:
                     elif event.key == pygame.K_2:
                         self.spaceship.purchase_upgrade("health")
                     elif event.key == pygame.K_3:
-                        self.spaceship.purchase_upgrade("speed")
+                        self.spaceship.purchase_upgrade("damage")  # Changed from "speed" to "damage"
                     
                     # Toggle autofire
                     if event.key == pygame.K_f:
@@ -569,11 +566,6 @@ class Game:
                         self.mothership.select_prev_alien()
                     elif event.key == pygame.K_e:
                         self.mothership.select_next_alien()
-                
-                elif self.game_over:
-                    # Restart game on Enter if game is over
-                    if event.key == pygame.K_RETURN:
-                        self.__init__()  # Reset the game
             
             # Key releases
             if event.type == pygame.KEYUP:
@@ -586,7 +578,7 @@ class Game:
                 self.mouse_pos = event.pos
             
             # Mouse click for spawning aliens
-            if event.type == pygame.MOUSEBUTTONDOWN and not self.game_over and not self.paused:
+            if event.type == pygame.MOUSEBUTTONDOWN and not self.game_over and not self.paused and not self.start_screen:
                 if event.button == 1:  # Left mouse button
                     # Check if we're in the top half of the screen (mothership territory)
                     if event.pos[1] < SCREEN_HEIGHT // 2:
@@ -595,7 +587,7 @@ class Game:
                             self.aliens.append(new_alien)
     
     def update(self):
-        if self.game_over or self.paused:
+        if self.game_over or self.paused or self.start_screen:
             return
         
         # Update player
@@ -694,255 +686,280 @@ class Game:
         # Clear the screen
         screen.fill(BLACK)
         
-        if self.help_screen:
+        # Check which screen to draw
+        if self.start_screen:
+            self.draw_start_screen()
+        elif self.help_screen:
             self.draw_help_screen()
-            return
-        
-        # Draw mothership
-        self.mothership.draw(screen)
-        
-        # Draw aliens
-        for alien in self.aliens:
-            alien.draw(screen)
-        
-        # Draw bullets
-        for bullet in self.bullets:
-            bullet.draw(screen)
-        
-        # Draw spaceship
-        self.spaceship.draw(screen)
-        
-        # Draw UI
-        self.draw_ui()
-        
-        # Draw game over screen if needed
-        if self.game_over:
-            self.draw_game_over()
+        else:
+            # Draw mothership
+            self.mothership.draw(screen)
+            
+            # Draw aliens
+            for alien in self.aliens:
+                alien.draw(screen)
+            
+            # Draw bullets
+            for bullet in self.bullets:
+                bullet.draw(screen)
+            
+            # Draw spaceship
+            self.spaceship.draw(screen)
+            
+            # Draw UI
+            self.draw_ui()
+            
+            # Draw game over screen if needed
+            if self.game_over:
+                self.draw_game_over()
         
         # Update the display
         pygame.display.flip()
     
+    def draw_start_screen(self):
+        # Draw start menu screen
+        # Fill background with starry background
+        screen.fill(BLACK)
+        
+        # Draw stars
+        for _ in range(200):
+            x = random.randint(0, SCREEN_WIDTH)
+            y = random.randint(0, SCREEN_HEIGHT)
+            size = random.randint(1, 3)
+            brightness = random.randint(150, 255)
+            pygame.draw.circle(screen, (brightness, brightness, brightness), (x, y), size)
+        
+        # Draw title
+        title_font = pygame.font.SysFont('Arial', int(60 * SCALE_FACTOR), bold=True)
+        title_text = title_font.render("SPACE INVADERS", True, WHITE)
+        subtitle_text = title_font.render("DEFENDER VS MOTHERSHIP", True, PURPLE)
+        
+        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, int(SCREEN_HEIGHT * 0.2)))
+        screen.blit(subtitle_text, (SCREEN_WIDTH // 2 - subtitle_text.get_width() // 2, int(SCREEN_HEIGHT * 0.3)))
+        
+        # Draw instructions
+        instruction_font = pygame.font.SysFont('Arial', int(28 * SCALE_FACTOR))
+        instruction_text = instruction_font.render("Press ENTER to Start", True, GREEN)
+        help_text = instruction_font.render("Press G during the game for help", True, YELLOW)
+        
+        screen.blit(instruction_text, (SCREEN_WIDTH // 2 - instruction_text.get_width() // 2, int(SCREEN_HEIGHT * 0.6)))
+        screen.blit(help_text, (SCREEN_WIDTH // 2 - help_text.get_width() // 2, int(SCREEN_HEIGHT * 0.65)))
+        
+        # Draw game description
+        desc_font = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
+        desc1 = desc_font.render("Player 1: Control the Spaceship and defend Earth", True, CYAN)
+        desc2 = desc_font.render("Player 2: Control the Mothership and invade Earth", True, RED)
+        
+        screen.blit(desc1, (SCREEN_WIDTH // 2 - desc1.get_width() // 2, int(SCREEN_HEIGHT * 0.75)))
+        screen.blit(desc2, (SCREEN_WIDTH // 2 - desc2.get_width() // 2, int(SCREEN_HEIGHT * 0.78)))
+    
     def draw_help_screen(self):
-        # Draw help screen with all game instructions
-        # Fill background with semi-transparent overlay
+        # Create a semi-transparent overlay
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 220))
+        overlay.fill((0, 0, 0, 200))  # Semi-transparent black
         screen.blit(overlay, (0, 0))
         
-        # Adjust font sizes for screen resolution
-        title_font = pygame.font.SysFont('Arial', int(40 * SCALE_FACTOR), bold=True)
-        header_font = pygame.font.SysFont('Arial', int(30 * SCALE_FACTOR), bold=True)
-        text_font = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
+        # Create a help box with margin
+        margin = int(50 * SCALE_FACTOR)
+        help_box = pygame.Rect(margin, margin, SCREEN_WIDTH - 2 * margin, SCREEN_HEIGHT - 2 * margin)
+        pygame.draw.rect(screen, BLACK, help_box)
+        pygame.draw.rect(screen, WHITE, help_box, 3)
         
         # Title
-        title = title_font.render("SPACE INVADERS: DEFENDER VS MOTHERSHIP", True, WHITE)
-        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, int(50 * SCALE_FACTOR)))
+        title_font = pygame.font.SysFont('Arial', int(40 * SCALE_FACTOR), bold=True)
+        title_text = title_font.render("GAME CONTROLS", True, WHITE)
+        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, margin + int(20 * SCALE_FACTOR)))
         
-        # Instructions sections
-        y_pos = int(120 * SCALE_FACTOR)
-        line_height = int(26 * SCALE_FACTOR)
+        # Help content
+        help_font = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
+        line_height = int(30 * SCALE_FACTOR)
+        start_y = margin + int(80 * SCALE_FACTOR)
         
-        # Game objective
-        objective_header = header_font.render("Game Objective:", True, YELLOW)
-        screen.blit(objective_header, (int(50 * SCALE_FACTOR), y_pos))
-        y_pos += line_height * 1.5
-        
-        objective_text = [
-            "This is a two-player competitive game based on Space Invaders.",
-            "Player 1 (Mothership): Spawn aliens to defeat the Spaceship.",
-            "Player 2 (Spaceship): Defend Earth by shooting aliens and the Mothership."
+        help_lines = [
+            "Spaceship Controls:",
+            "- Arrow Keys: Move left/right",
+            "- Space: Shoot",
+            "- F: Toggle autofire",
+            "- 1: Upgrade reload speed",
+            "- 2: Upgrade health",
+            "- 3: Upgrade bullet damage",  # Updated to reflect damage upgrade
+            "",
+            "Mothership Controls:",
+            "- Mouse: Click to spawn aliens",
+            "- Q/E: Select previous/next alien type",
+            "",
+            "Game Controls:",
+            "- ESC: Quit game",
+            "- G: Show/hide this help screen",
+            "",
+            "Hold G to keep help visible. Release to continue playing."
         ]
         
-        for line in objective_text:
-            text = text_font.render(line, True, WHITE)
-            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
-            y_pos += line_height
-        
-        y_pos += line_height
-        
-        # Player 1 controls
-        p1_header = header_font.render("Player 1 (Mothership) Controls:", True, PURPLE)
-        screen.blit(p1_header, (int(50 * SCALE_FACTOR), y_pos))
-        y_pos += line_height * 1.5
-        
-        p1_controls = [
-            "Q/E: Select different alien types",
-            "Left Mouse Click: Spawn selected alien at the clicked location",
-            "Earn money over time to spawn more aliens",
-            "Alien Types:",
-            "  - Squid (Blue): Fast kamikaze aliens that charge at the Spaceship",
-            "  - Crab (Red): Medium-health aliens that shoot at the Spaceship",
-            "  - Octopus (Yellow): Tank aliens with high health that deal continuous damage"
-        ]
-        
-        for line in p1_controls:
-            text = text_font.render(line, True, WHITE)
-            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
-            y_pos += line_height
-        
-        y_pos += line_height
-        
-        # Player 2 controls
-        p2_header = header_font.render("Player 2 (Spaceship) Controls:", True, GREEN)
-        screen.blit(p2_header, (int(50 * SCALE_FACTOR), y_pos))
-        y_pos += line_height * 1.5
-        
-        p2_controls = [
-            "Left/Right Arrow Keys: Move the spaceship",
-            "Space: Shoot",
-            "F: Toggle auto-fire",
-            "1: Upgrade reload speed",
-            "2: Upgrade max health",
-            "3: Upgrade movement speed",
-            "Earn money by destroying aliens"
-        ]
-        
-        for line in p2_controls:
-            text = text_font.render(line, True, WHITE)
-            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
-            y_pos += line_height
-        
-        y_pos += line_height
-        
-        # General controls
-        gen_header = header_font.render("General Controls:", True, CYAN)
-        screen.blit(gen_header, (int(50 * SCALE_FACTOR), y_pos))
-        y_pos += line_height * 1.5
-        
-        gen_controls = [
-            "G: Show/hide this help screen",
-            "Escape: Quit game",
-            "Enter: Restart game (after game over)"
-        ]
-        
-        for line in gen_controls:
-            text = text_font.render(line, True, WHITE)
-            screen.blit(text, (int(70 * SCALE_FACTOR), y_pos))
-            y_pos += line_height
-        
-        # Press G instruction at bottom
-        continue_text = text_font.render("Release G to continue playing", True, YELLOW)
-        screen.blit(continue_text, (SCREEN_WIDTH // 2 - continue_text.get_width() // 2, SCREEN_HEIGHT - int(50 * SCALE_FACTOR)))
-        
-        pygame.display.flip()
+        for i, line in enumerate(help_lines):
+            text = help_font.render(line, True, WHITE)
+            screen.blit(text, (margin + int(20 * SCALE_FACTOR), start_y + i * line_height))
     
     def draw_ui(self):
-        # Adjust font sizes for scale
-        font_small = pygame.font.SysFont('Arial', int(18 * SCALE_FACTOR))
-        font_medium = pygame.font.SysFont('Arial', int(22 * SCALE_FACTOR))
+        # Draw Mothership stats at top-left
+        mothership_money_text = font_medium.render(f"Money: ${int(self.mothership.money)}", True, YELLOW)
+        screen.blit(mothership_money_text, (int(10 * SCALE_FACTOR), int(10 * SCALE_FACTOR)))
         
-        # Health bars
-        # Player health bar
-        bar_height = int(20 * SCALE_FACTOR)
-        bar_width = int(200 * SCALE_FACTOR)
-        margin = int(10 * SCALE_FACTOR)
+        # Draw selected alien indicators (colored rectangles)
+        alien_size = int(30 * SCALE_FACTOR)
+        alien_spacing = int(10 * SCALE_FACTOR)
+        alien_y = int(60 * SCALE_FACTOR)
         
-        # Player health bar
-        pygame.draw.rect(screen, RED, (margin, SCREEN_HEIGHT - bar_height - margin, bar_width, bar_height))
-        pygame.draw.rect(screen, GREEN, (margin, SCREEN_HEIGHT - bar_height - margin, 
-                                        bar_width * (self.spaceship.health / self.spaceship.max_health), bar_height))
-        health_text = font_small.render(f"HP: {int(self.spaceship.health)}/{int(self.spaceship.max_health)}", True, WHITE)
-        screen.blit(health_text, (margin + 5, SCREEN_HEIGHT - bar_height - margin + 2))
+        # Squid indicator (blue)
+        squid_rect = pygame.Rect(int(10 * SCALE_FACTOR), alien_y, alien_size, alien_size)
+        pygame.draw.rect(screen, BLUE, squid_rect)
+        if self.mothership.selected_alien == "squid":
+            pygame.draw.rect(screen, WHITE, squid_rect, 2)  # Highlight selected
         
-        # Mothership health bar (already drawn in Mothership.draw method)
+        # Crab indicator (red)
+        crab_rect = pygame.Rect(int(10 * SCALE_FACTOR) + alien_size + alien_spacing, alien_y, alien_size, alien_size)
+        pygame.draw.rect(screen, RED, crab_rect)
+        if self.mothership.selected_alien == "crab":
+            pygame.draw.rect(screen, WHITE, crab_rect, 2)  # Highlight selected
         
-        # Player Money
-        money_text = font_small.render(f"Money: ${int(self.spaceship.money)}", True, YELLOW)
-        screen.blit(money_text, (margin, SCREEN_HEIGHT - bar_height * 2 - margin * 2))
+        # Octopus indicator (yellow)
+        octopus_rect = pygame.Rect(int(10 * SCALE_FACTOR) + (alien_size + alien_spacing) * 2, alien_y, alien_size, alien_size)
+        pygame.draw.rect(screen, YELLOW, octopus_rect)
+        if self.mothership.selected_alien == "octopus":
+            pygame.draw.rect(screen, WHITE, octopus_rect, 2)  # Highlight selected
         
-        # Player Upgrades
-        reload_text = font_small.render(f"1: Upgrade Reload (${int(100 * self.spaceship.reload_speed)})", True, CYAN)
-        health_text = font_small.render(f"2: Upgrade Health (${int(self.spaceship.max_health * 0.5)})", True, CYAN)
-        speed_text = font_small.render(f"3: Upgrade Speed (${int((self.spaceship.movement_speed / SCALE_FACTOR) * 30)})", True, CYAN)
+        # Draw alien cost text
+        alien_cost_font = pygame.font.SysFont('Arial', int(16 * SCALE_FACTOR))
+        alien_cost_text = alien_cost_font.render(f"Cost: ${self.mothership.alien_costs[self.mothership.selected_alien]}", True, YELLOW)
+        screen.blit(alien_cost_text, (int(10 * SCALE_FACTOR) + (alien_size + alien_spacing) * 3, alien_y + alien_size//2 - alien_cost_text.get_height()//2))
         
-        screen.blit(reload_text, (SCREEN_WIDTH - bar_width * 1.5, SCREEN_HEIGHT - bar_height * 3 - margin * 3))
-        screen.blit(health_text, (SCREEN_WIDTH - bar_width * 1.5, SCREEN_HEIGHT - bar_height * 2 - margin * 2))
-        screen.blit(speed_text, (SCREEN_WIDTH - bar_width * 1.5, SCREEN_HEIGHT - bar_height - margin))
+        # Draw Mothership health bar (purple) at top-right
+        mothership_health_width = int(200 * SCALE_FACTOR)
+        mothership_health_height = int(40 * SCALE_FACTOR)
+        mothership_health_x = SCREEN_WIDTH - mothership_health_width - int(10 * SCALE_FACTOR)
+        mothership_health_y = int(10 * SCALE_FACTOR)
         
-        # Player Stats
-        stats_text = font_small.render(f"Reload: {self.spaceship.reload_speed:.1f}x  Speed: {int(self.spaceship.movement_speed / SCALE_FACTOR)}  Autofire: {'ON' if self.spaceship.autofire else 'OFF'}", True, WHITE)
-        screen.blit(stats_text, (margin, SCREEN_HEIGHT - bar_height * 3 - margin * 3))
+        # Draw mothership health bar with trapezoid shape
+        points = [
+            (mothership_health_x, mothership_health_y),
+            (mothership_health_x + mothership_health_width, mothership_health_y),
+            (mothership_health_x + mothership_health_width - int(20 * SCALE_FACTOR), mothership_health_y + mothership_health_height),
+            (mothership_health_x + int(20 * SCALE_FACTOR), mothership_health_y + mothership_health_height)
+        ]
         
-        # Minimal instructions reminder
-        help_text = font_small.render("Press G for help", True, YELLOW)
-        screen.blit(help_text, (SCREEN_WIDTH // 2 - help_text.get_width() // 2, SCREEN_HEIGHT - margin * 2))
+        # Draw health bar background
+        pygame.draw.polygon(screen, (80, 0, 80), points)  # Darker purple
         
-        # Mothership player UI elements
-        # Selected alien indicator and costs
-        squid_cost = font_small.render(f"Squid: $50", True, BLUE)
-        crab_cost = font_small.render(f"Crab: $100", True, RED)
-        octopus_cost = font_small.render(f"Octopus: $200", True, YELLOW)
+        # Calculate current health width
+        health_percentage = self.mothership.health / self.mothership.max_health
+        if health_percentage > 0:
+            current_width = int(mothership_health_width * health_percentage)
+            current_points = [
+                (mothership_health_x, mothership_health_y),
+                (mothership_health_x + current_width, mothership_health_y),
+                (mothership_health_x + current_width - int(20 * SCALE_FACTOR * health_percentage), mothership_health_y + mothership_health_height),
+                (mothership_health_x + int(20 * SCALE_FACTOR), mothership_health_y + mothership_health_height)
+            ]
+            pygame.draw.polygon(screen, PURPLE, current_points)
         
-        # Draw selection boxes
-        box_size = int(30 * SCALE_FACTOR)
-        box_margin = int(15 * SCALE_FACTOR)
-        box_y = margin * 5
+        # Draw health bar border
+        pygame.draw.polygon(screen, (200, 0, 200), points, 2)  # Light purple border
         
-        # Squid selection
-        pygame.draw.rect(screen, WHITE if self.mothership.selected_alien == "squid" else BLUE, 
-                        (margin, box_y, box_size, box_size), 
-                        2 if self.mothership.selected_alien == "squid" else 1)
-        screen.blit(squid_img, (margin + 5, box_y + 5))
-        screen.blit(squid_cost, (margin, box_y + box_size + 5))
+        # Draw spaceship UI at bottom
+        # Draw health bar (green) at bottom-left
+        health_width = int(220 * SCALE_FACTOR)
+        health_height = int(20 * SCALE_FACTOR)
+        health_x = int(40 * SCALE_FACTOR)
+        health_y = SCREEN_HEIGHT - health_height - int(10 * SCALE_FACTOR)
         
-        # Crab selection
-        pygame.draw.rect(screen, WHITE if self.mothership.selected_alien == "crab" else RED, 
-                        (margin + box_size + box_margin, box_y, box_size, box_size), 
-                        2 if self.mothership.selected_alien == "crab" else 1)
-        screen.blit(crab_img, (margin + box_size + box_margin + 5, box_y + 5))
-        screen.blit(crab_cost, (margin + box_size + box_margin, box_y + box_size + 5))
+        # Background (empty health)
+        pygame.draw.rect(screen, RED, (health_x, health_y, health_width, health_height))
         
-        # Octopus selection
-        pygame.draw.rect(screen, WHITE if self.mothership.selected_alien == "octopus" else YELLOW, 
-                        (margin + 2 * (box_size + box_margin), box_y, box_size, box_size), 
-                        2 if self.mothership.selected_alien == "octopus" else 1)
-        screen.blit(octopus_img, (margin + 2 * (box_size + box_margin) + 5, box_y + 5))
-        screen.blit(octopus_cost, (margin + 2 * (box_size + box_margin), box_y + box_size + 5))
+        # Current health
+        current_health_width = int(health_width * (self.spaceship.health / self.spaceship.max_health))
+        pygame.draw.rect(screen, GREEN, (health_x, health_y, current_health_width, health_height))
+        
+        # Health text label
+        hp_text = font_medium.render(f"HP: {int(self.spaceship.health)}/{int(self.spaceship.max_health)}", True, WHITE)
+        screen.blit(hp_text, (int(10 * SCALE_FACTOR), health_y - int(5 * SCALE_FACTOR)))
+        
+        # Draw spaceship stats at bottom (single line)
+        stats_y = SCREEN_HEIGHT - int(40 * SCALE_FACTOR)
+        stats_x = int(10 * SCALE_FACTOR)
+        
+        # Display reload, damage and autofire status in one line
+        reload_text = font_medium.render(f"Reload: {self.spaceship.reload_speed:.1f}x", True, WHITE)
+        damage_text = font_medium.render(f"Damage: {int(self.spaceship.bullet_damage)}", True, WHITE)  # Changed from Speed to Damage
+        autofire_text = font_medium.render(f"Autofire: {'ON' if self.spaceship.autofire else 'OFF'}", True, WHITE)
+        
+        screen.blit(reload_text, (stats_x, stats_y))
+        screen.blit(damage_text, (stats_x + reload_text.get_width() + int(20 * SCALE_FACTOR), stats_y))
+        screen.blit(autofire_text, (stats_x + reload_text.get_width() + damage_text.get_width() + int(40 * SCALE_FACTOR), stats_y))
+        
+        # Display money
+        money_text = font_medium.render(f"Money: ${int(self.spaceship.money)}", True, YELLOW)
+        screen.blit(money_text, (stats_x, stats_y - int(30 * SCALE_FACTOR)))
+        
+        # Draw upgrade options at bottom-right
+        upgrade_font = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
+        
+        reload_cost = int(100 * self.spaceship.reload_speed)
+        health_cost = int(self.spaceship.max_health * 0.5)
+        damage_cost = int(self.spaceship.bullet_damage * 50)  # Changed from speed to damage
+        
+        upgrade_text1 = upgrade_font.render(f"1: Upgrade Reload (${reload_cost})", True, CYAN)
+        upgrade_text2 = upgrade_font.render(f"2: Upgrade Health (${health_cost})", True, CYAN)
+        upgrade_text3 = upgrade_font.render(f"3: Upgrade Damage (${damage_cost})", True, CYAN)  # Changed from Speed to Damage
+        
+        # Position at bottom-right of screen
+        upgrade_y = SCREEN_HEIGHT - int(80 * SCALE_FACTOR)
+        upgrade_x = SCREEN_WIDTH - max(upgrade_text1.get_width(), upgrade_text2.get_width(), upgrade_text3.get_width()) - int(10 * SCALE_FACTOR)
+        
+        screen.blit(upgrade_text1, (upgrade_x, upgrade_y))
+        screen.blit(upgrade_text2, (upgrade_x, upgrade_y + int(25 * SCALE_FACTOR)))
+        screen.blit(upgrade_text3, (upgrade_x, upgrade_y + int(50 * SCALE_FACTOR)))
+        
+        # Draw "Press G for help" at bottom center
+        help_text = font_medium.render("Press G for help", True, YELLOW)
+        screen.blit(help_text, (SCREEN_WIDTH // 2 - help_text.get_width() // 2, SCREEN_HEIGHT - help_text.get_height() - int(10 * SCALE_FACTOR)))
     
     def draw_game_over(self):
-        # Adjust font sizes for scale
-        font_large = pygame.font.SysFont('Arial', int(48 * SCALE_FACTOR))
-        font_medium = pygame.font.SysFont('Arial', int(32 * SCALE_FACTOR))
-        
-        # Semi-transparent overlay
+        # Create a semi-transparent overlay
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 180))  # Semi-transparent black
         screen.blit(overlay, (0, 0))
         
-        # Game over text
-        game_over_text = font_large.render("GAME OVER", True, WHITE)
-        screen.blit(game_over_text, (SCREEN_WIDTH // 2 - game_over_text.get_width() // 2, SCREEN_HEIGHT // 2 - int(50 * SCALE_FACTOR)))
+        # Draw game over text
+        game_over_font = pygame.font.SysFont('Arial', int(80 * SCALE_FACTOR), bold=True)
+        winner_font = pygame.font.SysFont('Arial', int(60 * SCALE_FACTOR))
+        restart_font = pygame.font.SysFont('Arial', int(30 * SCALE_FACTOR))
         
-        # Winner text
-        winner_text = font_medium.render(f"{self.winner} wins!", True, WHITE)
-        screen.blit(winner_text, (SCREEN_WIDTH // 2 - winner_text.get_width() // 2, SCREEN_HEIGHT // 2))
+        game_over_text = game_over_font.render("GAME OVER", True, RED)
+        winner_text = winner_font.render(f"{self.winner} Wins!", True, YELLOW if self.winner == "Spaceship" else PURPLE)
+        restart_text = restart_font.render("Press ENTER to Restart", True, WHITE)
         
-        # Restart text
-        restart_text = font_medium.render("Press ENTER to restart", True, WHITE)
-        screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + int(50 * SCALE_FACTOR)))
-
-# Main game function
-def main():
-    game = Game()
+        screen.blit(game_over_text, (SCREEN_WIDTH // 2 - game_over_text.get_width() // 2, SCREEN_HEIGHT // 3))
+        screen.blit(winner_text, (SCREEN_WIDTH // 2 - winner_text.get_width() // 2, SCREEN_HEIGHT // 3 + int(100 * SCALE_FACTOR)))
+        screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 3 + int(200 * SCALE_FACTOR)))
     
-    # Main game loop
-    while game.is_running:
-        # Handle events
-        game.handle_events()
+    def run(self):
+        while self.is_running:
+            # Limit frame rate
+            clock.tick(FPS)
+            
+            # Handle events
+            self.handle_events()
+            
+            # Update game state
+            self.update()
+            
+            # Draw game
+            self.draw()
         
-        # Update game state
-        game.update()
-        
-        # Draw everything
-        game.draw()
-        
-        # Cap the frame rate
-        clock.tick(FPS)
-    
-    # Quit pygame
-    pygame.quit()
-    sys.exit()
+        # Clean up
+        pygame.quit()
+        sys.exit()
 
-# Run the game
+# Create and run the game
 if __name__ == "__main__":
-    main()
+    game = Game()
+    game.run()
