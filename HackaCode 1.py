@@ -44,7 +44,8 @@ def load_image(filename, size):
 
 # Load images with proper scaling
 def load_game_assets():
-    spaceship_size = (int(60 * SCALE_FACTOR), int(45 * SCALE_FACTOR))
+    # 50% larger spaceship (increased size)
+    spaceship_size = (int(90 * SCALE_FACTOR), int(67 * SCALE_FACTOR))
     mothership_size = (int(180 * SCALE_FACTOR), int(90 * SCALE_FACTOR))
     squid_size = (int(30 * SCALE_FACTOR), int(30 * SCALE_FACTOR))
     crab_size = (int(45 * SCALE_FACTOR), int(45 * SCALE_FACTOR))
@@ -194,63 +195,23 @@ class Alien(GameObject):
             health_bar_height
         ), 1)
 
-# Squid alien (kamikaze)
+# Squid alien (now behaves like other aliens - removed kamikaze mode)
 class Squid(Alien):
     def __init__(self, x, y):
         size = int(30 * SCALE_FACTOR)
-        super().__init__(x, y, size, size, 1, 2 * SCALE_FACTOR, 10, 50, game_assets['squid'])
-        self.kamikaze_mode = False
-        self.kamikaze_speed = 3 * SCALE_FACTOR
-        self.target_x = 0
-        self.target_y = 0
-        self.direction_timer = 0
-        self.direction_change_interval = 20
+        # Increased health from 1 to 2
+        super().__init__(x, y, size, size, 2, 2 * SCALE_FACTOR, 10, 50, game_assets['squid'])
     
-    def move(self):
-        # Check if we're close to the bottom of the screen to enter kamikaze mode
-        if self.y > SCREEN_HEIGHT * 0.6 and not self.kamikaze_mode:
-            self.kamikaze_mode = True
-            
-        if not self.kamikaze_mode:
-            # Standard alien movement pattern
-            self.x += self.speed * self.direction
-            
-            # Keep in bounds
-            if self.x <= 0:
-                self.direction = 1
-                self.y += int(60 * SCALE_FACTOR)
-            elif self.x + self.width >= SCREEN_WIDTH:
-                self.direction = -1
-                self.y += int(60 * SCALE_FACTOR)
-        else:
-            # Kamikaze mode - rapid movement toward spaceship
-            # We'll update the target position periodically to follow the spaceship
-            self.direction_timer += 1
-            if self.direction_timer >= self.direction_change_interval:
-                self.direction_timer = 0
-                # This will be set in Game.update() to point to the current spaceship position
-                
-            # Move toward the target (if it's been set)
-            if self.target_x != 0:
-                dx = self.target_x - (self.x + self.width/2)
-                dy = self.target_y - (self.y + self.height/2)
-                distance = max(1, (dx**2 + dy**2)**0.5)  # Avoid division by zero
-                
-                # Normalize and multiply by speed
-                self.x += (dx / distance) * self.kamikaze_speed
-                self.y += (dy / distance) * self.kamikaze_speed
-        
-        super().update()
-        
-    def set_target(self, x, y):
-        self.target_x = x
-        self.target_y = y
+    def update(self):
+        self.move()
+        return 0
 
 # Crab alien (shooter)
 class Crab(Alien):
     def __init__(self, x, y):
         size = int(45 * SCALE_FACTOR)
-        super().__init__(x, y, size, size, 3, 1 * SCALE_FACTOR, 5, 100, game_assets['crab'])
+        # Decreased health from 3 to 2
+        super().__init__(x, y, size, size, 2, 1 * SCALE_FACTOR, 5, 100, game_assets['crab'])
         self.bullet_damage = 5
         self.shoot_cooldown = 0
     
@@ -271,7 +232,8 @@ class Crab(Alien):
 class Octopus(Alien):
     def __init__(self, x, y):
         size = int(60 * SCALE_FACTOR)
-        super().__init__(x, y, size, size, 8, 0.5 * SCALE_FACTOR, 3, 200, game_assets['octopus'])
+        # Increased health from 8 to 10
+        super().__init__(x, y, size, size, 10, 0.5 * SCALE_FACTOR, 3, 200, game_assets['octopus'])
         self.ticking = False
         self.tick_timer = 0
     
@@ -290,8 +252,9 @@ class Octopus(Alien):
 # Spaceship (player)
 class Spaceship(GameObject):
     def __init__(self, x, y):
-        size_w = int(60 * SCALE_FACTOR)
-        size_h = int(45 * SCALE_FACTOR)
+        # Using the larger size defined in load_game_assets
+        size_w = int(90 * SCALE_FACTOR)
+        size_h = int(67 * SCALE_FACTOR)
         super().__init__(x, y, size_w, size_h, game_assets['spaceship'])
         self.health = 100
         self.max_health = 100
@@ -300,28 +263,32 @@ class Spaceship(GameObject):
         self.reload_cooldown = 0
         self.money = 100
         self.bullet_damage = 1  # Starting damage
-        self.autofire = False  # Added autofire flag
+        self.autofire = False
         self.autofire_cooldown = 0
+        
+        # Track upgrade levels for increasing prices
+        self.reload_level = 0
+        self.health_level = 0
+        self.damage_level = 0
     
     def update(self):
+        # Changed controls to A and D (instead of left/right arrows)
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT] and self.x > 0:
+        if keys[pygame.K_a] and self.x > 0:  # A key for left
             self.x -= self.movement_speed
-        if keys[pygame.K_RIGHT] and self.x < SCREEN_WIDTH - self.width:
+        if keys[pygame.K_d] and self.x < SCREEN_WIDTH - self.width:  # D key for right
             self.x += self.movement_speed
         
         if self.reload_cooldown > 0:
             self.reload_cooldown -= 1
-            
-        # Handle autofire
-        if self.autofire:
-            self.autofire_cooldown -= 1
-            if self.autofire_cooldown <= 0:
-                self.autofire_cooldown = int(60 / self.reload_speed)
-                return self.shoot()
+        
+        bullet = None
+        # Handle autofire - Fixed to work properly
+        if self.autofire and self.reload_cooldown <= 0:
+            bullet = self.shoot()
         
         super().update()
-        return None  # Return None if no bullet was fired
+        return bullet  # Return the bullet if one was fired
     
     def shoot(self):
         if self.reload_cooldown <= 0:
@@ -338,28 +305,45 @@ class Spaceship(GameObject):
     
     def purchase_upgrade(self, upgrade_type):
         if upgrade_type == "reload":
-            cost = int(100 * self.reload_speed)
+            # Steeper exponential cost increase: base cost * 2^level
+            cost = int(100 * (2 ** self.reload_level))
             if self.money >= cost:
                 self.money -= cost
                 self.reload_speed += 0.5
+                self.reload_level += 1
                 return True
         elif upgrade_type == "health":
-            cost = int(self.max_health * 0.5)
+            # Steeper exponential cost increase: base cost * 1.8^level
+            cost = int(50 * (1.8 ** self.health_level))
             if self.money >= cost:
                 self.money -= cost
                 self.max_health += 50
                 self.health = min(self.health + 50, self.max_health)
+                self.health_level += 1
                 return True
-        elif upgrade_type == "damage":  # Changed from "speed" to "damage"
-            cost = int(self.bullet_damage * 50)  # Cost based on current damage
+        elif upgrade_type == "damage":  
+            # Steeper exponential cost increase: base cost * 2.5^level
+            cost = int(150 * (2.5 ** self.damage_level))
             if self.money >= cost:
                 self.money -= cost
-                self.bullet_damage += 1  # Increase bullet damage by 1
+                self.bullet_damage += 1
+                self.damage_level += 1
                 return True
         return False
     
+    def get_upgrade_cost(self, upgrade_type):
+        """Return the cost of the next upgrade of the specified type."""
+        if upgrade_type == "reload":
+            return int(100 * (2 ** self.reload_level))
+        elif upgrade_type == "health":
+            return int(50 * (1.8 ** self.health_level))
+        elif upgrade_type == "damage":
+            return int(150 * (2.5 ** self.damage_level))
+        return 0
+    
     def toggle_autofire(self):
         self.autofire = not self.autofire
+        self.reload_cooldown = 0  # Reset cooldown when toggling autofire
         return self.autofire
     
     def add_money(self, amount):
@@ -374,11 +358,11 @@ class Mothership(GameObject):
         self.health = 500
         self.max_health = 500
         self.money = 200
-        self.money_growth_rate = 50  # Increased for discrete increments
-        self.growth_factor = 0.1
+        self.money_growth_rate = 25  # Reduced from 50 to 25
+        self.growth_factor = 0.05    # Reduced from 0.1 to 0.05
         self.time = 0
         self.money_timer = 0
-        self.money_interval = 60  # Add money every second (60 frames)
+        self.money_interval = 90     # Increased from 60 to 90 (slower money generation)
         self.spawn_cooldown = 0
         self.spawn_cooldown_time = 30  # Half a second cooldown between spawns
         self.selected_alien = "squid"  # Default selection
@@ -396,11 +380,17 @@ class Mothership(GameObject):
             "crab": 100,
             "octopus": 200
         }
+        
+        # Add movement parameters for random movement
+        self.movement_timer = 0
+        self.movement_interval = 300  # 5 seconds at 60 FPS
+        self.target_x = x
+        self.move_speed = 2 * SCALE_FACTOR
     
     def update(self):
         self.time += 1
         
-        # Earn money at discrete intervals with exponential growth
+        # Earn money at discrete intervals with slower growth
         self.money_timer += 1
         if self.money_timer >= self.money_interval:
             self.money_timer = 0
@@ -410,6 +400,20 @@ class Mothership(GameObject):
         # Update spawn cooldown
         if self.spawn_cooldown > 0:
             self.spawn_cooldown -= 1
+        
+        # Random movement every 5 seconds
+        self.movement_timer += 1
+        if self.movement_timer >= self.movement_interval:
+            self.movement_timer = 0
+            # Choose a new random position on the top third of the screen, away from edges
+            margin = int(100 * SCALE_FACTOR)
+            self.target_x = random.randint(margin, SCREEN_WIDTH - self.width - margin)
+        
+        # Move toward target position
+        if self.x < self.target_x:
+            self.x += min(self.move_speed, self.target_x - self.x)
+        elif self.x > self.target_x:
+            self.x -= min(self.move_speed, self.x - self.target_x)
         
         super().update()
     
@@ -463,31 +467,35 @@ class Mothership(GameObject):
         # Draw the mothership
         super().draw(surface)
         
-        # Draw health bar
+        # Draw health bar directly on top of the mothership
         health_bar_width = self.width
         health_bar_height = int(10 * SCALE_FACTOR)
+        health_bar_y = self.y - health_bar_height - int(5 * SCALE_FACTOR)
         
-        # Health bar background (empty)
+        # Health bar background (empty/red)
         pygame.draw.rect(surface, RED, (
             self.x, 
-            self.y - health_bar_height - int(5 * SCALE_FACTOR), 
+            health_bar_y,
             health_bar_width, 
             health_bar_height
         ))
         
-        # Health bar fill (current health)
+        # Health bar fill (green for current health)
         current_health_width = int(health_bar_width * (self.health / self.max_health))
-        pygame.draw.rect(surface, PURPLE, (
+        pygame.draw.rect(surface, GREEN, (
             self.x, 
-            self.y - health_bar_height - int(5 * SCALE_FACTOR), 
+            health_bar_y,
             current_health_width, 
             health_bar_height
         ))
         
-        # Draw money
-        money_font = pygame.font.SysFont('Arial', int(24 * SCALE_FACTOR))
-        money_text = money_font.render(f"Money: ${int(self.money)}", True, YELLOW)
-        surface.blit(money_text, (int(10 * SCALE_FACTOR), int(10 * SCALE_FACTOR)))
+        # Health bar border
+        pygame.draw.rect(surface, WHITE, (
+            self.x, 
+            health_bar_y,
+            health_bar_width, 
+            health_bar_height
+        ), 1)
 
 # Game class
 class Game:
@@ -500,8 +508,9 @@ class Game:
         self.start_screen = True  # Added start screen flag
         
         # Create game objects
-        spaceship_x = SCREEN_WIDTH // 2 - int(30 * SCALE_FACTOR)
-        spaceship_y = SCREEN_HEIGHT - int(60 * SCALE_FACTOR)
+        spaceship_x = SCREEN_WIDTH // 2 - int(45 * SCALE_FACTOR)  # Centered for larger ship
+        # Move the spaceship higher up on the screen (25% up from previous position)
+        spaceship_y = SCREEN_HEIGHT - int(120 * SCALE_FACTOR)  # Higher position
         mothership_x = SCREEN_WIDTH // 2 - int(90 * SCALE_FACTOR)
         mothership_y = int(20 * SCALE_FACTOR)
         
@@ -543,7 +552,7 @@ class Game:
                 
                 # Game controls
                 elif not self.paused and not self.game_over:
-                    # Spaceship player controls
+                    # Spaceship player controls (now using A/D instead of arrow keys)
                     if event.key == pygame.K_SPACE:
                         bullet = self.spaceship.shoot()
                         if bullet:
@@ -555,16 +564,16 @@ class Game:
                     elif event.key == pygame.K_2:
                         self.spaceship.purchase_upgrade("health")
                     elif event.key == pygame.K_3:
-                        self.spaceship.purchase_upgrade("damage")  # Changed from "speed" to "damage"
+                        self.spaceship.purchase_upgrade("damage")
                     
                     # Toggle autofire
                     if event.key == pygame.K_f:
                         self.spaceship.toggle_autofire()
                     
-                    # Mothership player controls
-                    if event.key == pygame.K_q:
+                    # Mothership player controls (now using arrow keys)
+                    if event.key == pygame.K_LEFT:
                         self.mothership.select_prev_alien()
-                    elif event.key == pygame.K_e:
+                    elif event.key == pygame.K_RIGHT:
                         self.mothership.select_next_alien()
             
             # Key releases
@@ -590,24 +599,16 @@ class Game:
         if self.game_over or self.paused or self.start_screen:
             return
         
-        # Update player
-        self.spaceship.update()
-        
-        # Check for autofire
-        auto_bullet = self.spaceship.update()
-        if auto_bullet:
-            self.bullets.append(auto_bullet)
+        # Update player and check for autofire bullets
+        bullet = self.spaceship.update()
+        if bullet:
+            self.bullets.append(bullet)
         
         # Update mothership
         self.mothership.update()
         
         # Update aliens
         for alien in self.aliens[:]:
-            # Set target for squids if they're in kamikaze mode
-            if isinstance(alien, Squid) and alien.kamikaze_mode:
-                alien.set_target(self.spaceship.x + self.spaceship.width/2, 
-                                self.spaceship.y + self.spaceship.height/2)
-            
             alien.update()
             
             # Check if aliens reached the spaceship
@@ -775,18 +776,20 @@ class Game:
         line_height = int(30 * SCALE_FACTOR)
         start_y = margin + int(80 * SCALE_FACTOR)
         
+        # Update help to show new controls and exponential price increases
         help_lines = [
             "Spaceship Controls:",
-            "- Arrow Keys: Move left/right",
+            "- A/D Keys: Move left/right",  # Updated to A/D
             "- Space: Shoot",
             "- F: Toggle autofire",
-            "- 1: Upgrade reload speed",
-            "- 2: Upgrade health",
-            "- 3: Upgrade bullet damage",  # Updated to reflect damage upgrade
+            "- 1: Upgrade reload speed (prices increase exponentially)",  # Updated for exponential increases
+            "- 2: Upgrade health (prices increase exponentially)",
+            "- 3: Upgrade damage (prices increase exponentially)",
             "",
             "Mothership Controls:",
             "- Mouse: Click to spawn aliens",
-            "- Q/E: Select previous/next alien type",
+            "- Left/Right Arrow Keys: Select previous/next alien type",  # Updated to arrow keys
+            "- Mothership moves automatically every 5 seconds",  # Added info about auto movement
             "",
             "Game Controls:",
             "- ESC: Quit game",
@@ -809,6 +812,7 @@ class Game:
         alien_spacing = int(10 * SCALE_FACTOR)
         alien_y = int(60 * SCALE_FACTOR)
         
+        # Draw alien selection boxes with labels
         # Squid indicator (blue)
         squid_rect = pygame.Rect(int(10 * SCALE_FACTOR), alien_y, alien_size, alien_size)
         pygame.draw.rect(screen, BLUE, squid_rect)
@@ -827,42 +831,24 @@ class Game:
         if self.mothership.selected_alien == "octopus":
             pygame.draw.rect(screen, WHITE, octopus_rect, 2)  # Highlight selected
         
-        # Draw alien cost text
+        # Draw alien labels below the boxes
+        alien_label_font = pygame.font.SysFont('Arial', int(12 * SCALE_FACTOR))
+        squid_label = alien_label_font.render("Squid", True, BLUE)
+        crab_label = alien_label_font.render("Crab", True, RED)
+        octopus_label = alien_label_font.render("Octopus", True, YELLOW)
+        
+        # Position labels below boxes
+        screen.blit(squid_label, (int(10 * SCALE_FACTOR) + (alien_size - squid_label.get_width()) // 2, 
+                                 alien_y + alien_size + int(5 * SCALE_FACTOR)))
+        screen.blit(crab_label, (int(10 * SCALE_FACTOR) + alien_size + alien_spacing + (alien_size - crab_label.get_width()) // 2, 
+                                alien_y + alien_size + int(5 * SCALE_FACTOR)))
+        screen.blit(octopus_label, (int(10 * SCALE_FACTOR) + (alien_size + alien_spacing) * 2 + (alien_size - octopus_label.get_width()) // 2, 
+                                  alien_y + alien_size + int(5 * SCALE_FACTOR)))
+        
+        # Draw cost text on the right of the boxes
         alien_cost_font = pygame.font.SysFont('Arial', int(16 * SCALE_FACTOR))
         alien_cost_text = alien_cost_font.render(f"Cost: ${self.mothership.alien_costs[self.mothership.selected_alien]}", True, YELLOW)
         screen.blit(alien_cost_text, (int(10 * SCALE_FACTOR) + (alien_size + alien_spacing) * 3, alien_y + alien_size//2 - alien_cost_text.get_height()//2))
-        
-        # Draw Mothership health bar (purple) at top-right
-        mothership_health_width = int(200 * SCALE_FACTOR)
-        mothership_health_height = int(40 * SCALE_FACTOR)
-        mothership_health_x = SCREEN_WIDTH - mothership_health_width - int(10 * SCALE_FACTOR)
-        mothership_health_y = int(10 * SCALE_FACTOR)
-        
-        # Draw mothership health bar with trapezoid shape
-        points = [
-            (mothership_health_x, mothership_health_y),
-            (mothership_health_x + mothership_health_width, mothership_health_y),
-            (mothership_health_x + mothership_health_width - int(20 * SCALE_FACTOR), mothership_health_y + mothership_health_height),
-            (mothership_health_x + int(20 * SCALE_FACTOR), mothership_health_y + mothership_health_height)
-        ]
-        
-        # Draw health bar background
-        pygame.draw.polygon(screen, (80, 0, 80), points)  # Darker purple
-        
-        # Calculate current health width
-        health_percentage = self.mothership.health / self.mothership.max_health
-        if health_percentage > 0:
-            current_width = int(mothership_health_width * health_percentage)
-            current_points = [
-                (mothership_health_x, mothership_health_y),
-                (mothership_health_x + current_width, mothership_health_y),
-                (mothership_health_x + current_width - int(20 * SCALE_FACTOR * health_percentage), mothership_health_y + mothership_health_height),
-                (mothership_health_x + int(20 * SCALE_FACTOR), mothership_health_y + mothership_health_height)
-            ]
-            pygame.draw.polygon(screen, PURPLE, current_points)
-        
-        # Draw health bar border
-        pygame.draw.polygon(screen, (200, 0, 200), points, 2)  # Light purple border
         
         # Draw spaceship UI at bottom
         # Draw health bar (green) at bottom-left
@@ -871,56 +857,78 @@ class Game:
         health_x = int(40 * SCALE_FACTOR)
         health_y = SCREEN_HEIGHT - health_height - int(10 * SCALE_FACTOR)
         
-        # Background (empty health)
+        # Background (empty health - red)
         pygame.draw.rect(screen, RED, (health_x, health_y, health_width, health_height))
         
-        # Current health
+        # Current health (green)
         current_health_width = int(health_width * (self.spaceship.health / self.spaceship.max_health))
         pygame.draw.rect(screen, GREEN, (health_x, health_y, current_health_width, health_height))
         
-        # Health text label
-        hp_text = font_medium.render(f"HP: {int(self.spaceship.health)}/{int(self.spaceship.max_health)}", True, WHITE)
-        screen.blit(hp_text, (int(10 * SCALE_FACTOR), health_y - int(5 * SCALE_FACTOR)))
+        # Health bar border
+        pygame.draw.rect(screen, WHITE, (health_x, health_y, health_width, health_height), 1)
         
-        # Draw spaceship stats at bottom (single line)
+        # Draw HP text inside the health bar
+        health_text_font = pygame.font.SysFont('Arial', int(16 * SCALE_FACTOR))
+        health_text = health_text_font.render(f"HP: {int(self.spaceship.health)}/{int(self.spaceship.max_health)}", True, WHITE)
+        
+        # Center the text within the health bar
+        health_text_x = health_x + (health_width - health_text.get_width()) // 2
+        health_text_y = health_y + (health_height - health_text.get_height()) // 2
+        screen.blit(health_text, (health_text_x, health_text_y))
+        
+        # Draw spaceship stats at bottom (middle for reload and damage)
+        # Display reload and damage levels in the middle-bottom
         stats_y = SCREEN_HEIGHT - int(40 * SCALE_FACTOR)
-        stats_x = int(10 * SCALE_FACTOR)
         
-        # Display reload, damage and autofire status in one line
         reload_text = font_medium.render(f"Reload: {self.spaceship.reload_speed:.1f}x", True, WHITE)
-        damage_text = font_medium.render(f"Damage: {int(self.spaceship.bullet_damage)}", True, WHITE)  # Changed from Speed to Damage
-        autofire_text = font_medium.render(f"Autofire: {'ON' if self.spaceship.autofire else 'OFF'}", True, WHITE)
+        damage_text = font_medium.render(f"Damage: {int(self.spaceship.bullet_damage)}", True, WHITE)
         
-        screen.blit(reload_text, (stats_x, stats_y))
-        screen.blit(damage_text, (stats_x + reload_text.get_width() + int(20 * SCALE_FACTOR), stats_y))
-        screen.blit(autofire_text, (stats_x + reload_text.get_width() + damage_text.get_width() + int(40 * SCALE_FACTOR), stats_y))
+        # Position reload and damage in the middle
+        center_x = SCREEN_WIDTH // 2
+        reload_x = center_x - reload_text.get_width() - int(10 * SCALE_FACTOR)
+        damage_x = center_x + int(10 * SCALE_FACTOR)
         
-        # Display money
+        screen.blit(reload_text, (reload_x, stats_y))
+        screen.blit(damage_text, (damage_x, stats_y))
+        
+        # Display money (non-overlapping with stats)
         money_text = font_medium.render(f"Money: ${int(self.spaceship.money)}", True, YELLOW)
-        screen.blit(money_text, (stats_x, stats_y - int(30 * SCALE_FACTOR)))
+        screen.blit(money_text, (int(20 * SCALE_FACTOR), stats_y - int(30 * SCALE_FACTOR)))
         
-        # Draw upgrade options at bottom-right
+        # Draw upgrade options at bottom-right with dynamic costs
         upgrade_font = pygame.font.SysFont('Arial', int(20 * SCALE_FACTOR))
         
-        reload_cost = int(100 * self.spaceship.reload_speed)
-        health_cost = int(self.spaceship.max_health * 0.5)
-        damage_cost = int(self.spaceship.bullet_damage * 50)  # Changed from speed to damage
+        # Get current upgrade costs based on levels
+        reload_cost = self.spaceship.get_upgrade_cost("reload")
+        health_cost = self.spaceship.get_upgrade_cost("health")
+        damage_cost = self.spaceship.get_upgrade_cost("damage")
         
         upgrade_text1 = upgrade_font.render(f"1: Upgrade Reload (${reload_cost})", True, CYAN)
         upgrade_text2 = upgrade_font.render(f"2: Upgrade Health (${health_cost})", True, CYAN)
-        upgrade_text3 = upgrade_font.render(f"3: Upgrade Damage (${damage_cost})", True, CYAN)  # Changed from Speed to Damage
+        upgrade_text3 = upgrade_font.render(f"3: Upgrade Damage (${damage_cost})", True, CYAN)
         
-        # Position at bottom-right of screen
-        upgrade_y = SCREEN_HEIGHT - int(80 * SCALE_FACTOR)
+        # Position at bottom-right of screen, moved up by one text height
+        upgrade_y = SCREEN_HEIGHT - int(120 * SCALE_FACTOR)  # Moved up one text-size
         upgrade_x = SCREEN_WIDTH - max(upgrade_text1.get_width(), upgrade_text2.get_width(), upgrade_text3.get_width()) - int(10 * SCALE_FACTOR)
         
         screen.blit(upgrade_text1, (upgrade_x, upgrade_y))
         screen.blit(upgrade_text2, (upgrade_x, upgrade_y + int(25 * SCALE_FACTOR)))
         screen.blit(upgrade_text3, (upgrade_x, upgrade_y + int(50 * SCALE_FACTOR)))
         
-        # Draw "Press G for help" at bottom center
+        # Draw "Press G for help" at bottom right, under the upgrade text
         help_text = font_medium.render("Press G for help", True, YELLOW)
-        screen.blit(help_text, (SCREEN_WIDTH // 2 - help_text.get_width() // 2, SCREEN_HEIGHT - help_text.get_height() - int(10 * SCALE_FACTOR)))
+        help_text_x = SCREEN_WIDTH - help_text.get_width() - int(10 * SCALE_FACTOR)
+        help_text_y = SCREEN_HEIGHT - help_text.get_height() - int(10 * SCALE_FACTOR)
+        screen.blit(help_text, (help_text_x, help_text_y))
+        
+        # Draw control reminders for each player
+        control_font = pygame.font.SysFont('Arial', int(16 * SCALE_FACTOR))
+        spaceship_control = control_font.render("A/D: Move Spaceship", True, CYAN)
+        mothership_control = control_font.render("←/→: Switch Aliens", True, PURPLE)
+        
+        # Position control reminders
+        screen.blit(spaceship_control, (int(20 * SCALE_FACTOR), SCREEN_HEIGHT - int(70 * SCALE_FACTOR)))
+        screen.blit(mothership_control, (int(20 * SCALE_FACTOR), int(120 * SCALE_FACTOR)))
     
     def draw_game_over(self):
         # Create a semi-transparent overlay
